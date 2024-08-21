@@ -1,0 +1,46 @@
+name: sync library changes
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs daily at midnight (adjust the schedule as needed)
+  workflow_dispatch: # Allows manual trigger of the workflow
+  push:
+    branches:
+      - main # Optional: Trigger when you push to the main branch
+
+jobs:
+  sync-library:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Target Repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Set Up Git
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+
+    - name: Add Sanadi-Library Remote
+      run: |
+        git remote add library https://github.com/test-org-sf/library.git
+        git fetch library
+
+    - name: Identify New Commits
+      id: commits
+      run: |
+        git checkout main
+        git log main..library/main --pretty=format:"%H" > new_commits.txt 
+        echo "::set-output name=commits::$(cat new_commits.txt)"
+
+    - name: Cherry-Pick Commits
+      run: |
+        for commit in $(echo "${{ steps.commits.outputs.commits }}" | tr ' ' '\n'); do
+          git cherry-pick $commit || git cherry-pick --abort
+        done
+
+    - name: Push Changes to Main Branch
+      run: git push origin main
+      if: success()
